@@ -69,8 +69,6 @@ services:
       superset-init:
         condition: service_completed_successfully
     volumes: *superset-volumes
-    networks:
-      - analytics-network
 
   superset-init:
     image: *superset-image
@@ -90,8 +88,6 @@ services:
     volumes: *superset-volumes
     healthcheck:
       disable: true
-    networks:
-      - analytics-network
 
   superset-worker:
     image: *superset-image
@@ -114,8 +110,6 @@ services:
           "CMD-SHELL",
           "celery -A superset.tasks.celery_app:app inspect ping -d celery@$$HOSTNAME",
         ]
-    networks:
-      - analytics-network
 
   superset-worker-beat:
     image: *superset-image
@@ -134,8 +128,6 @@ services:
     volumes: *superset-volumes
     healthcheck:
       disable: true
-    networks:
-      - analytics-network
 
 volumes:
   superset_home:
@@ -144,6 +136,3 @@ volumes:
     external: false
   redis:
     external: false
-networks:
-  analytics-network:
-    external: true
