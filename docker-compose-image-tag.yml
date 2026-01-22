@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 # ULTRA-OPTIMIZED FOR 32GB RAM + 32 CORE CPU
-# Production-Ready High-Performance Configuration
+# Compatible with older Docker Compose versions
 
 x-superset-image: &superset-image apachesuperset.docker.scarf.sh/apache/superset:${TAG:-latest-dev}
 x-superset-volumes: &superset-volumes
@@ -25,26 +25,26 @@ x-superset-volumes: &superset-volumes
 
 x-superset-environment: &superset-environment
   DATABASE_DIALECT: postgresql
-  DATABASE_USER: superset
+  DATABASE_USER: ${DATABASE_USER:-superset}
   DATABASE_PASSWORD: ${DATABASE_PASSWORD:-superset}
-  DATABASE_HOST: db
-  DATABASE_PORT: 5432
-  DATABASE_DB: superset
-  EXAMPLES_USER: superset
-  EXAMPLES_PASSWORD: ${DATABASE_PASSWORD:-superset}
-  EXAMPLES_HOST: db
-  EXAMPLES_PORT: 5432
-  EXAMPLES_DB: superset_examples
-  REDIS_HOST: redis
-  REDIS_PORT: 6379
-  REDIS_CELERY_DB: 0
-  REDIS_RESULTS_DB: 1
-  SUPERSET_LOG_LEVEL: WARNING
-  FLASK_ENV: production
+  DATABASE_HOST: ${DATABASE_HOST:-db}
+  DATABASE_PORT: ${DATABASE_PORT:-5432}
+  DATABASE_DB: ${DATABASE_DB:-superset}
+  EXAMPLES_USER: ${EXAMPLES_USER:-superset}
+  EXAMPLES_PASSWORD: ${EXAMPLES_PASSWORD:-superset}
+  EXAMPLES_HOST: ${EXAMPLES_HOST:-db}
+  EXAMPLES_PORT: ${EXAMPLES_PORT:-5432}
+  EXAMPLES_DB: ${EXAMPLES_DB:-superset_examples}
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  REDIS_CELERY_DB: ${REDIS_CELERY_DB:-0}
+  REDIS_RESULTS_DB: ${REDIS_RESULTS_DB:-1}
+  SUPERSET_LOG_LEVEL: ${SUPERSET_LOG_LEVEL:-warning}
+  FLASK_ENV: ${FLASK_ENV:-production}
   PYTHONUNBUFFERED: 1
 
 services:
-  # PostgreSQL - Optimized for 32GB system
+  # PostgreSQL Database - Optimized for 32GB system
   db:
     env_file:
       - path: docker/.env
@@ -98,13 +98,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    resources:
-      limits:
-        cpus: "8"
-        memory: "8G"
-      reservations:
-        cpus: "4"
-        memory: "4G"
 
   # Redis Cache - High Performance In-Memory
   redis:
@@ -134,13 +127,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    resources:
-      limits:
-        cpus: "4"
-        memory: "8G"
-      reservations:
-        cpus: "2"
-        memory: "4G"
 
   # Superset Initialization
   superset-init:
@@ -163,7 +149,7 @@ services:
     healthcheck:
       disable: true
 
-  # Superset Web Application - 32 Workers
+  # Superset Web Application - 32 Workers for 32 cores
   superset:
     image: *superset-image
     container_name: superset_app
@@ -205,15 +191,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    resources:
-      limits:
-        cpus: "14"
-        memory: "12G"
-      reservations:
-        cpus: "8"
-        memory: "8G"
 
-  # Celery Worker - 32 Concurrency
+  # Celery Worker - 32 Concurrency for 32 cores
   superset-worker:
     image: *superset-image
     container_name: superset_worker
@@ -250,13 +229,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    resources:
-      limits:
-        cpus: "12"
-        memory: "10G"
-      reservations:
-        cpus: "8"
-        memory: "6G"
 
   # Celery Beat - Task Scheduler
   superset-worker-beat:
@@ -277,13 +249,6 @@ services:
     volumes: *superset-volumes
     healthcheck:
       disable: true
-    resources:
-      limits:
-        cpus: "2"
-        memory: "2G"
-      reservations:
-        cpus: "1"
-        memory: "1G"
 
 volumes:
   superset_home:
