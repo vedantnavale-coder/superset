@@ -14,131 +14,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# ULTRA-OPTIMIZED FOR 32GB RAM + 32 CORE CPU
-# Compatible with older Docker Compose versions
 
+# -----------------------------------------------------------------------
+# We don't support docker compose for production environments.
+# If you choose to use this type of deployment make sure to
+# create you own docker environment file (docker/.env) with your own
+# unique random secure passwords and SECRET_KEY.
+#
+# For verbose logging during development:
+# - Set SUPERSET_LOG_LEVEL=debug in docker/.env-local for detailed Superset logs
+# -----------------------------------------------------------------------
 x-superset-image: &superset-image apachesuperset.docker.scarf.sh/apache/superset:${TAG:-latest-dev}
-x-superset-volumes: &superset-volumes
+x-superset-volumes:
+  &superset-volumes # /app/pythonpath_docker will be appended to the PYTHONPATH in the final container
   - ./docker:/app/docker
   - ./superset-core:/app/superset-core
   - superset_home:/app/superset_home
 
-x-superset-environment: &superset-environment
-  DATABASE_DIALECT: postgresql
-  DATABASE_USER: ${DATABASE_USER:-superset}
-  DATABASE_PASSWORD: ${DATABASE_PASSWORD:-superset}
-  DATABASE_HOST: ${DATABASE_HOST:-db}
-  DATABASE_PORT: ${DATABASE_PORT:-5432}
-  DATABASE_DB: ${DATABASE_DB:-superset}
-  EXAMPLES_USER: ${EXAMPLES_USER:-superset}
-  EXAMPLES_PASSWORD: ${EXAMPLES_PASSWORD:-superset}
-  EXAMPLES_HOST: ${EXAMPLES_HOST:-db}
-  EXAMPLES_PORT: ${EXAMPLES_PORT:-5432}
-  EXAMPLES_DB: ${EXAMPLES_DB:-superset_examples}
-  REDIS_HOST: ${REDIS_HOST:-redis}
-  REDIS_PORT: ${REDIS_PORT:-6379}
-  REDIS_CELERY_DB: ${REDIS_CELERY_DB:-0}
-  REDIS_RESULTS_DB: ${REDIS_RESULTS_DB:-1}
-  SUPERSET_LOG_LEVEL: ${SUPERSET_LOG_LEVEL:-warning}
-  FLASK_ENV: ${FLASK_ENV:-production}
-  PYTHONUNBUFFERED: 1
-
 services:
-  # PostgreSQL Database - Optimized for 32GB system
+  redis:
+    image: redis:7
+    container_name: superset_cache
+    restart: unless-stopped
+    volumes:
+      - redis:/data
+
   db:
     env_file:
-      - path: docker/.env
+      - path: docker/.env # default
         required: true
-      - path: docker/.env-local
+      - path: docker/.env-local # optional override
         required: false
-    image: postgres:16-alpine
+    image: postgres:16
     container_name: superset_db
     restart: unless-stopped
-    command:
-      - "postgres"
-      - "-c"
-      - "shared_buffers=8GB"
-      - "-c"
-      - "effective_cache_size=24GB"
-      - "-c"
-      - "maintenance_work_mem=2GB"
-      - "-c"
-      - "work_mem=512MB"
-      - "-c"
-      - "max_connections=300"
-      - "-c"
-      - "max_worker_processes=8"
-      - "-c"
-      - "max_parallel_workers_per_gather=4"
-      - "-c"
-      - "max_parallel_workers=8"
-      - "-c"
-      - "max_parallel_maintenance_workers=4"
-      - "-c"
-      - "random_page_cost=1.1"
-      - "-c"
-      - "synchronous_commit=off"
-      - "-c"
-      - "wal_buffers=16MB"
-      - "-c"
-      - "checkpoint_completion_target=0.9"
-      - "-c"
-      - "wal_level=minimal"
-      - "-c"
-      - "default_statistics_target=100"
-      - "-c"
-      - "jit=on"
-      - "-c"
-      - "jit_above_cost=100000"
     volumes:
       - db_home:/var/lib/postgresql/data
       - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U superset"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  # Redis Cache - High Performance In-Memory
-  redis:
-    image: redis:7-alpine
-    container_name: superset_cache
+  superset:
+    env_file:
+      - path: docker/.env # default
+        required: true
+      - path: docker/.env-local # optional override
+        required: false
+    image: *superset-image
+    container_name: superset_app
+    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
+    user: "root"
     restart: unless-stopped
-    command:
-      - "redis-server"
-      - "--maxmemory=8gb"
-      - "--maxmemory-policy=allkeys-lru"
-      - "--tcp-backlog=511"
-      - "--timeout=0"
-      - "--tcp-keepalive=300"
-      - "--databases=16"
-      - "--save=60:1000"
-      - "--appendonly=yes"
-      - "--appendfsync=everysec"
-      - "--lazyfree-lazy-eviction=yes"
-      - "--lazyfree-lazy-expire=yes"
-      - "--lazyfree-lazy-server-del=yes"
-      - "--io-threads=4"
-      - "--io-threads-do-reads=yes"
-    volumes:
-      - redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    ports:
+      - 8088:8088
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    volumes: *superset-volumes
 
-  # Superset Initialization
   superset-init:
     image: *superset-image
     container_name: superset_init
     command: ["/app/docker/docker-init.sh"]
     env_file:
-      - path: docker/.env
+      - path: docker/.env # default
         required: true
-      - path: docker/.env-local
+      - path: docker/.env-local # optional override
         required: false
-    environment: *superset-environment
     depends_on:
       db:
         condition: service_started
@@ -149,71 +89,15 @@ services:
     healthcheck:
       disable: true
 
-  # Superset Web Application - 32 Workers for 32 cores
-  superset:
-    image: *superset-image
-    container_name: superset_app
-    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
-    user: "root"
-    restart: unless-stopped
-    depends_on:
-      superset-init:
-        condition: service_completed_successfully
-    env_file:
-      - path: docker/.env
-        required: true
-      - path: docker/.env-local
-        required: false
-    environment:
-      <<: *superset-environment
-      GUNICORN_WORKERS: 32
-      GUNICORN_WORKER_CLASS: gthread
-      GUNICORN_THREADS: 2
-      GUNICORN_TIMEOUT: 300
-      GUNICORN_KEEPALIVE: 5
-      GUNICORN_CMD_ARGS: >-
-        --workers 32
-        --worker-class gthread
-        --threads 2
-        --timeout 300
-        --keepalive 5
-        --max-requests 1000
-        --max-requests-jitter 100
-        --bind 0.0.0.0:8088
-        --limit-request-line 0
-        --limit-request-field_size 0
-      SUPERSET_WEBSERVER_TIMEOUT: 300
-    ports:
-      - "8088:8088"
-    volumes: *superset-volumes
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Celery Worker - 32 Concurrency for 32 cores
   superset-worker:
     image: *superset-image
     container_name: superset_worker
-    command:
-      - "celery"
-      - "--app=superset.tasks.celery_app:app"
-      - "worker"
-      - "--loglevel=warning"
-      - "--concurrency=32"
-      - "--prefetch-multiplier=4"
-      - "--max-tasks-per-child=1000"
-      - "--time-limit=1800"
-      - "--soft-time-limit=1800"
-      - "-Q"
-      - "default,sql_lab,email,reports"
+    command: ["/app/docker/docker-bootstrap.sh", "worker"]
     env_file:
-      - path: docker/.env
+      - path: docker/.env # default
         required: true
-      - path: docker/.env-local
+      - path: docker/.env-local # optional override
         required: false
-    environment: *superset-environment
     restart: unless-stopped
     depends_on:
       superset-init:
@@ -226,21 +110,16 @@ services:
           "CMD-SHELL",
           "celery -A superset.tasks.celery_app:app inspect ping -d celery@$$HOSTNAME",
         ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  # Celery Beat - Task Scheduler
   superset-worker-beat:
     image: *superset-image
     container_name: superset_worker_beat
     command: ["/app/docker/docker-bootstrap.sh", "beat"]
     env_file:
-      - path: docker/.env
+      - path: docker/.env # default
         required: true
-      - path: docker/.env-local
+      - path: docker/.env-local # optional override
         required: false
-    environment: *superset-environment
     restart: unless-stopped
     depends_on:
       superset-init:
