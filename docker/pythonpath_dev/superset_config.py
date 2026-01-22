@@ -155,14 +155,16 @@ GUEST_TOKEN_JWT_EXP_SECONDS = 3600
 
 ENABLE_CORS = True
 
+# Enable CORS
+ENABLE_CORS = True
+
 CORS_OPTIONS = {
     "supports_credentials": True,
-    "allow_headers": ["*"],
-    "expose_headers": ["*"],
-    "resources": ["*"],
-    "origins": [
-        "http://localhost:3000", "*"
-    ],
+    "origins": "*",
+    "allow_headers": "*",
+    "expose_headers": "*",
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 }
 
+# Disable CSP / HTTPS enforcement (needed for embeds & cross-origin)
 TALISMAN_ENABLED = False
